@@ -29,4 +29,10 @@ public class QuoteHandler {
                         Quote.class
                 );
     }
+
+    public Mono<ServerResponse> streamQuotes(ServerRequest request) {
+        return ok()
+                .contentType(MediaType.APPLICATION_STREAM_JSON)
+                .body(quoteGeneratorService.fetchQuoteStream(Duration.ofMillis(200)), Quote.class);
+    }
 }
