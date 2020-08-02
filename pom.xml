@@ -12,7 +12,7 @@
     <artifactId>webflux-stock-quote-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>webflux-stock-quote-service</name>
-    <description>WebFlux Stock Quote Service (SFG Tutuorial - Reactive Programming)</description>
+    <description>WebFlux Stock Quote Service (SFG Tutorial - Reactive Programming)</description>
 
     <properties>
         <java.version>1.8</java.version>
