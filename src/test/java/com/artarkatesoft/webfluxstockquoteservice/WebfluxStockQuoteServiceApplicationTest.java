@@ -7,6 +7,8 @@ import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWeb
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
 
 import java.util.concurrent.CountDownLatch;
 
@@ -37,7 +39,7 @@ class WebfluxStockQuoteServiceApplicationTest {
     }
 
     @Test
-    void testStreamQuotes() throws InterruptedException {
+    void testStreamQuotes_countDownLatch() throws InterruptedException {
         CountDownLatch countDownLatch = new CountDownLatch(10);
         webTestClient
                 .get()
@@ -47,11 +49,30 @@ class WebfluxStockQuoteServiceApplicationTest {
                 .returnResult(Quote.class)
                 .getResponseBody()
                 .take(10)
-                .subscribe(quote->{
+                .subscribe(quote -> {
                     assertThat(quote.getPrice()).isPositive();
                     countDownLatch.countDown();
                 });
         countDownLatch.await();
         System.out.println("Test complete");
+    }
+
+    @Test
+    void testStreamQuotes_stepVerifier() {
+        //when
+        Flux<Quote> quoteFlux = webTestClient
+                .get()
+                .uri("/quotes")
+                .accept(MediaType.APPLICATION_STREAM_JSON)
+                .exchange()
+                .returnResult(Quote.class)
+                .getResponseBody();
+        //then
+        StepVerifier.create(quoteFlux.take(10))
+                .expectSubscription()
+                .thenConsumeWhile(
+                        quote -> true,
+                        quote -> assertThat(quote.getPrice()).isPositive())
+                .verifyComplete();
     }
 }
