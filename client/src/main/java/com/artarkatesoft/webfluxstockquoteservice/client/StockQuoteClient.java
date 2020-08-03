@@ -1,6 +1,7 @@
 package com.artarkatesoft.webfluxstockquoteservice.client;
 
 import com.artarkatesoft.webfluxstockquoteservice.client.model.Quote;
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +24,9 @@ public class StockQuoteClient {
     private String port;
     private String path;
 
+    @Setter(AccessLevel.PRIVATE)
     private WebClient webClient;
+    @Setter(AccessLevel.PRIVATE)
     private String requestUrl;
 
     @PostConstruct
