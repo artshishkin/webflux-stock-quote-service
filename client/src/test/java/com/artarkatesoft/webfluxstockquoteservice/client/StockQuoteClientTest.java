@@ -6,7 +6,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -17,6 +20,8 @@ import reactor.test.StepVerifier;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -29,6 +34,7 @@ import static org.springframework.http.MediaType.APPLICATION_STREAM_JSON_VALUE;
 class StockQuoteClientTest {
 
     public static MockWebServer mockBackEnd;
+    private static final MathContext MATH_CONTEXT = new MathContext(2);
 
     @InjectMocks
     StockQuoteClient stockQuoteClient;
@@ -95,7 +101,7 @@ class StockQuoteClientTest {
     }
 
     @Test
-    @Disabled
+//    @Disabled
     void getQuoteStream_isIn() throws JsonProcessingException, InterruptedException {
         //given
         String valueAsString = objectMapper.writeValueAsString(defaultQuotes);
@@ -111,7 +117,12 @@ class StockQuoteClientTest {
                 .expectSubscription()
                 .thenConsumeWhile(
                         quote -> true,
-                        quote -> assertThat(quote).isIn(defaultQuotes))
+                        quote -> {
+                            BigDecimal oldPrice = quote.getPrice();
+                            BigDecimal newPrice = new BigDecimal(String.valueOf(oldPrice), MATH_CONTEXT);
+                            quote.setPrice(newPrice);
+                            assertThat(quote).isIn(defaultQuotes);
+                        })
                 .verifyComplete();
         RecordedRequest recordedRequest = mockBackEnd.takeRequest();
 
