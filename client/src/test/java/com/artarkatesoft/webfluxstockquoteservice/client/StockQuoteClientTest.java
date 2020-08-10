@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
+import okio.Buffer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
@@ -22,6 +24,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.MathContext;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -68,13 +72,16 @@ class StockQuoteClientTest {
         postConstruct.invoke(stockQuoteClient);
 
         defaultQuotes = IntStream.rangeClosed(1, 20).mapToObj(this::createFakeQuote).collect(Collectors.toList());
-        objectMapper = new ObjectMapper();
+
+        Jackson2JsonEncoder jackson2JsonEncoder = new Jackson2JsonEncoder();
+
+        objectMapper = jackson2JsonEncoder.getObjectMapper();
     }
 
     private Quote createFakeQuote(int i) {
         Quote quote = new Quote("Ticker" + i, 100.0 + i);
         quote.setId("ID" + i);
-//        quote.setInstant(Instant.now());
+        quote.setInstant(Instant.now());
         return quote;
     }
 
@@ -83,6 +90,7 @@ class StockQuoteClientTest {
         //given
         String valueAsString = objectMapper.writeValueAsString(defaultQuotes);
         System.out.println("----------------" + valueAsString);
+
         mockBackEnd.enqueue(new MockResponse()
                 .setBody(valueAsString)
                 .addHeader(HttpHeaders.CONTENT_TYPE, APPLICATION_STREAM_JSON_VALUE));
@@ -90,10 +98,11 @@ class StockQuoteClientTest {
         Flux<Quote> quoteFlux = stockQuoteClient.getQuoteStream();
 
         //then
-        StepVerifier.create(quoteFlux)
+        StepVerifier.create(quoteFlux.log("                  getQuoteStream_count-----"))
                 .expectSubscription()
-                .expectNextCount(20)
-                .verifyComplete();
+                .expectNextCount(10)
+                .thenCancel()
+                .verify();
         RecordedRequest recordedRequest = mockBackEnd.takeRequest();
 
         assertEquals("GET", recordedRequest.getMethod());
@@ -101,29 +110,71 @@ class StockQuoteClientTest {
     }
 
     @Test
-//    @Disabled
     void getQuoteStream_isIn() throws JsonProcessingException, InterruptedException {
         //given
         String valueAsString = objectMapper.writeValueAsString(defaultQuotes);
-        System.out.println("----------------" + valueAsString);
+        System.out.println("                ----getQuoteStream_isIn------" + valueAsString);
         mockBackEnd.enqueue(new MockResponse()
+//                .setBody(buffer)
                 .setBody(valueAsString)
                 .addHeader(HttpHeaders.CONTENT_TYPE, APPLICATION_STREAM_JSON_VALUE));
         //when
         Flux<Quote> quoteFlux = stockQuoteClient.getQuoteStream();
 
         //then
-        StepVerifier.create(quoteFlux)
+        StepVerifier.create(quoteFlux.log("                  getQuoteStream_isIn-----"))
                 .expectSubscription()
                 .thenConsumeWhile(
-                        quote -> true,
+                        quote -> !quote.getTicker().equals("Ticker" + 10),
                         quote -> {
                             BigDecimal oldPrice = quote.getPrice();
                             BigDecimal newPrice = new BigDecimal(String.valueOf(oldPrice), MATH_CONTEXT);
                             quote.setPrice(newPrice);
                             assertThat(quote).isIn(defaultQuotes);
                         })
-                .verifyComplete();
+                .thenCancel()
+                .verify();
+        RecordedRequest recordedRequest = mockBackEnd.takeRequest();
+
+        assertEquals("GET", recordedRequest.getMethod());
+        assertEquals("/quotes", recordedRequest.getPath());
+    }
+
+    @Test
+    void getQuoteStream_isIn_using_buffer() throws  InterruptedException {
+        //given
+        Buffer buffer = new Buffer();
+
+        defaultQuotes.stream()
+                .map(quote -> {
+                    try {
+                        return objectMapper.writeValueAsString(quote);
+                    } catch (JsonProcessingException e) {
+                        throw new RuntimeException("Can not map quote " + quote + " to json", e);
+                    }
+                })
+                .forEach(stringQuote -> buffer.writeString(stringQuote, StandardCharsets.UTF_8));
+
+
+        mockBackEnd.enqueue(new MockResponse()
+                .setBody(buffer)
+                .addHeader(HttpHeaders.CONTENT_TYPE, APPLICATION_STREAM_JSON_VALUE));
+        //when
+        Flux<Quote> quoteFlux = stockQuoteClient.getQuoteStream();
+
+        //then
+        StepVerifier.create(quoteFlux.log("                  getQuoteStream_isIn_using_buffer-----"))
+                .expectSubscription()
+                .thenConsumeWhile(
+                        quote -> !quote.getTicker().equals("Ticker" + 10),
+                        quote -> {
+                            BigDecimal oldPrice = quote.getPrice();
+                            BigDecimal newPrice = new BigDecimal(String.valueOf(oldPrice), MATH_CONTEXT);
+                            quote.setPrice(newPrice);
+                            assertThat(quote).isIn(defaultQuotes);
+                        })
+                .thenCancel()
+                .verify();
         RecordedRequest recordedRequest = mockBackEnd.takeRequest();
 
         assertEquals("GET", recordedRequest.getMethod());
